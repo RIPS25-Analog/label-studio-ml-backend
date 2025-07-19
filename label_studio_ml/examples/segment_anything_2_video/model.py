@@ -14,15 +14,22 @@ from label_studio_sdk._extensions.label_studio_tools.core.utils.io import get_lo
 from label_studio_sdk.label_interface.objects import PredictionValue
 from PIL import Image
 from sam2.build_sam import build_sam2, build_sam2_video_predictor
+import sys
+
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-logger.info('Initialising model for video tracking')
+
+logger.debug('Initialising model for video tracking')
 
 DEVICE = os.getenv('DEVICE', 'cuda')
 SEGMENT_ANYTHING_2_REPO_PATH = os.getenv('SEGMENT_ANYTHING_2_REPO_PATH', 'segment-anything-2')
-MODEL_CONFIG = os.getenv('MODEL_CONFIG', 'sam2.1_hiera_t.yaml')
-MODEL_CHECKPOINT = os.getenv('MODEL_CHECKPOINT', 'sam2.1_hiera_tiny.pt')
-MAX_FRAMES_TO_TRACK = int(os.getenv('MAX_FRAMES_TO_TRACK', 10))
+MODEL_CONFIG = os.getenv('MODEL_CONFIG') #, 'configs/sam2.1/sam2.1_hiera_t.yaml')
+logger.debug(f'Using model config: {MODEL_CONFIG}')
+MODEL_CHECKPOINT = os.getenv('MODEL_CHECKPOINT') #, '/app/checkpoints/sam2.1_hiera_tiny.pt')
+# MODEL_CHECKPOINT = '/home/vagarwal/label-studio-ml-backend/label_studio_ml/examples/segment_anything_2_video/checkpoints/sam2.1_hiera_tiny.pt'
+
+MAX_FRAMES_TO_TRACK = int(os.getenv('MAX_FRAMES_TO_TRACK', 10000))
 
 if DEVICE == 'cuda':
     # use bfloat16 for the entire notebook
@@ -35,9 +42,7 @@ if DEVICE == 'cuda':
 
 
 # build path to the model checkpoint
-sam2_checkpoint = '/app/checkpoints/sam2.1_hiera_tiny.pt'
-predictor = build_sam2_video_predictor(MODEL_CONFIG, sam2_checkpoint)
-
+predictor = build_sam2_video_predictor(MODEL_CONFIG, MODEL_CHECKPOINT)
 
 # manage cache for inference state
 # TODO: make it process-safe and implement cache invalidation
@@ -57,15 +62,35 @@ class NewModel(LabelStudioMLBase):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        logger.info("NewModel initialized successfully")
+        logger.debug("NewModel initialized successfully")
 
-    def split_frames(self, video_path, temp_dir, start_frame=0, end_frame=100):
+    def split_frames(self, video_name, video_path, temp_dir, start_frame=0, end_frame=100):
         # Open the video file
-        logger.debug(f'Opening video file: {video_path}')
+        # logger.info(f'Opening video file: {video_path}')
+        
+        # # Add debugging information about the file
+        # if not os.path.exists(video_path):
+        #     logger.error(f'Video file does not exist: {video_path}')
+        #     raise ValueError(f"Video file does not exist: {video_path}")
+        
+        # file_size = os.path.getsize(video_path)
+        # logger.info(f'Video file size: {file_size} bytes')    
+        
+        # # Try to examine the file content
+        # if file_size < 1e6:
+        #     try:
+        #         with open(video_path, 'rb') as f:
+        #             header = f.read(min(5000, file_size))
+        #             logger.warning(f'File header: {header[:5000]}')  # First 5000 bytes as text
+        #             # logger.warning(f'File header (hex): {header.hex()}')
+        #     except Exception as e:
+        #         logger.error(f'Could not read file: {e}')
+        video_path = f'/data/videos/{video_name}'
         video = cv2.VideoCapture(video_path)
-
+        
         # check if loaded correctly
         if not video.isOpened():
+            logger.error(f'Could not open video file: {video_path}')
             raise ValueError(f"Could not open video file: {video_path}")
         else:
             # display number of frames
@@ -219,11 +244,21 @@ class NewModel(LabelStudioMLBase):
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> ModelResponse:
         """ Returns the predicted mask for a smart keypoint that has been placed."""
-        logger.debug(f'model.predict called with tasks: {len(tasks)}, context: {context}, kwargs: {kwargs}')
+        logger.debug(f'model.predict called')
+        logger.debug(f'with tasks: {len(tasks)}, context: {context}, kwargs: {kwargs}')
+        logger.debug(f'Tasks: {tasks}')
         from_name, to_name, value = self.get_first_tag_occurence('VideoRectangle', 'Video')
+        logger.debug(f'from_name: {from_name}, to_name: {to_name}, value: {value}')
+
+        if len(tasks[0]['annotations']) == 0:
+            logger.warning(f'No annotations found in the task, returning empty predictions')
+            return ModelResponse(predictions=[])
+        
+        context = tasks[0]['annotations'][0]
 
         if not context or not context.get('result'):
             # if there is no context, no interaction has happened yet
+            logger.warning(f'No context provided, returning empty predictions')
             return ModelResponse(predictions=[])
 
         task = tasks[0]
@@ -233,7 +268,8 @@ class NewModel(LabelStudioMLBase):
 
         # cache the video locally
         video_path = get_local_path(video_url, task_id=task_id)
-        logger.debug(f'Video path: {video_path}')
+        video_name = video_path.split('-')[-1]
+        logger.debug(f'Video path: {video_path}, name: {video_name}')
 
         # get prompts from context
         prompts = self.get_prompts(context)
@@ -246,13 +282,13 @@ class NewModel(LabelStudioMLBase):
         frames_count, duration = self._get_fps(context)
         fps = frames_count / duration
 
-        logger.debug(
+        logger.info(
             f'Number of prompts: {len(prompts)}, '
             f'first frame index: {first_frame_idx}, '
             f'last frame index: {last_frame_idx}, '
             f'obj_ids: {obj_ids}')
 
-        frames_to_track = MAX_FRAMES_TO_TRACK
+        frames_to_track = min(frames_count, MAX_FRAMES_TO_TRACK)
 
         # Split the video into frames
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -263,7 +299,7 @@ class NewModel(LabelStudioMLBase):
 
             # get all frames
             frames = list(self.split_frames(
-                video_path, temp_dir,
+                video_name, video_path, temp_dir,
                 start_frame=first_frame_idx,
                 end_frame=last_frame_idx + frames_to_track + 1
             ))

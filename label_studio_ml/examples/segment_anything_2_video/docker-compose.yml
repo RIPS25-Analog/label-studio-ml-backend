@@ -22,16 +22,16 @@ services:
       # any other parameters that you want to pass to the model server
       - ANY=PARAMETER
       # specify the number of workers and threads for the model server
-      - WORKERS=8
+      - WORKERS=1
       - THREADS=8
       # specify the model directory (likely you don't need to change this)
       - MODEL_DIR=/data/models
       # specify device
       - DEVICE=cuda  # or 'cpu' (coming soon)
       # SAM2 model config
-      - MODEL_CONFIG=/configs/sam2.1/sam2.1_hiera_t.yaml
+      - MODEL_CONFIG=/configs/sam2.1/sam2.1_hiera_l.yaml
       # SAM2 checkpoint
-      - MODEL_CHECKPOINT=sam2.1_hiera_tiny.pt
+      - MODEL_CHECKPOINT=/app/checkpoints/sam2.1_hiera_large.pt
       - CHECKPOINT_DIR=/app/checkpoints
 
       # Specify the Label Studio URL and API key to access
@@ -39,11 +39,12 @@ services:
       # Do not use 'localhost' as it does not work within Docker containers.
       # Use prefix 'http://' or 'https://' for the URL always.
       # Determine the actual IP using 'ifconfig' (Linux/Mac) or 'ipconfig' (Windows).
-      - LABEL_STUDIO_URL=https://94b44f66cd2f.ngrok-free.app
+      - LABEL_STUDIO_URL=https://rapid-immensely-yak.ngrok-free.app
       - LABEL_STUDIO_API_KEY=20327ff90a6f723d46ef2bbf348958b82059c932
     ports:
       - "9090:9090"
     volumes:
       - "./data/server:/data"
-      - ./checkpoints:/app/checkpoints
+      - ./checkpoints:/checkpoints
       - ./configs:/configs
+      - /home/data/seg-vids/:/data/videos
