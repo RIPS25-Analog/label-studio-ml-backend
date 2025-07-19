@@ -35,7 +35,7 @@ if DEVICE == 'cuda':
 
 
 # build path to the model checkpoint
-sam2_checkpoint = str(pathlib.Path(__file__).parent / SEGMENT_ANYTHING_2_REPO_PATH / "checkpoints" / MODEL_CHECKPOINT)
+sam2_checkpoint = '/home/vagarwal/label-studio-ml-backend/label_studio_ml/examples/segment_anything_2_video/checkpoints/sam2_hiera_large.pt'
 predictor = build_sam2_video_predictor(MODEL_CONFIG, sam2_checkpoint)
 
 
