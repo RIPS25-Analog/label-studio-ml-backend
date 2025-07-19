@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   segment_anything_2_video:
     container_name: segment_anything_2_video
@@ -8,7 +6,14 @@ services:
       context: .
       args:
         TEST_ENV: ${TEST_ENV}
+    runtime: nvidia  # <--- required for older versions
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
       # specify these parameters if you want to use basic auth for the model server
       - BASIC_AUTH_USER=
       - BASIC_AUTH_PASS=
@@ -24,9 +29,10 @@ services:
       # specify device
       - DEVICE=cuda  # or 'cpu' (coming soon)
       # SAM2 model config
-      - MODEL_CONFIG=sam2_hiera_t.yaml
+      - MODEL_CONFIG=/configs/sam2.1/sam2.1_hiera_t.yaml
       # SAM2 checkpoint
-      - MODEL_CHECKPOINT=sam2_hiera_tiny.pt
+      - MODEL_CHECKPOINT=sam2.1_hiera_tiny.pt
+      - CHECKPOINT_DIR=/app/checkpoints
 
       # Specify the Label Studio URL and API key to access
       # uploaded, local storage and cloud storage files.
@@ -39,3 +45,5 @@ services:
       - "9090:9090"
     volumes:
       - "./data/server:/data"
+      - ./checkpoints:/app/checkpoints
+      - ./configs:/configs

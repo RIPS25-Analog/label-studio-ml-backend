@@ -53,6 +53,7 @@ def _predict():
     @return:
     Predictions in LS format
     """
+    logger.error(f'got predict request')
     data = request.json
     tasks = data.get('tasks')
     label_config = data.get('label_config')
@@ -65,7 +66,8 @@ def _predict():
                         label_config=label_config)
 
     # model.use_label_config(label_config)
-
+    logger.error(f'Using model {model.__class__.__name__} for project {project_id}')
+    logger.error(f'Making prediction for {len(tasks)} tasks with context: {context} and params: {params}')
     response = model.predict(tasks, context=context, **params)
 
     # if there is no model version we will take the default
